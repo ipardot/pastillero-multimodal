@@ -1,0 +1,5 @@
+pastillero.db
+*.db-journal
+__pycache__/
+.venv/
+.pytest_cache/

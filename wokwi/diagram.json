@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "author": "Julian Agudelo - EAFIT",
+  "editor": "wokwi",
+  "parts": [
+    { "type": "board-esp32-devkit-c-v4", "id": "esp", "top": 0, "left": 0, "attrs": {} },
+    { "type": "wokwi-servo", "id": "servo1", "top": -150, "left": 200, "attrs": {} },
+    { "type": "wokwi-led", "id": "led1", "top": 40, "left": 260, "attrs": { "color": "red", "label": "Comp 1" } },
+    { "type": "wokwi-led", "id": "led2", "top": 40, "left": 310, "attrs": { "color": "yellow", "label": "Comp 2" } },
+    { "type": "wokwi-led", "id": "led3", "top": 40, "left": 360, "attrs": { "color": "green", "label": "Comp 3" } },
+    { "type": "wokwi-resistor", "id": "r1", "top": 130, "left": 250, "rotate": 90, "attrs": { "value": "220" } },
+    { "type": "wokwi-resistor", "id": "r2", "top": 130, "left": 300, "rotate": 90, "attrs": { "value": "220" } },
+    { "type": "wokwi-resistor", "id": "r3", "top": 130, "left": 350, "rotate": 90, "attrs": { "value": "220" } },
+    { "type": "wokwi-buzzer", "id": "bz1", "top": 220, "left": 260, "attrs": { "volume": "0.3" } },
+    { "type": "wokwi-pushbutton", "id": "btnConf", "top": 260, "left": -200, "attrs": { "color": "green", "label": "Confirmar" } },
+    { "type": "wokwi-pushbutton", "id": "btnPosp", "top": 330, "left": -200, "attrs": { "color": "blue", "label": "Posponer" } }
+  ],
+  "connections": [
+    [ "esp:TX", "$serialMonitor:RX", "", [] ],
+    [ "esp:RX", "$serialMonitor:TX", "", [] ],
+
+    [ "esp:18", "servo1:PWM", "orange", [] ],
+    [ "esp:5V", "servo1:V+", "red", [] ],
+    [ "esp:GND.1", "servo1:GND", "black", [] ],
+
+    [ "esp:25", "r1:1", "red", [] ],
+    [ "r1:2", "led1:A", "red", [] ],
+    [ "led1:C", "esp:GND.2", "black", [] ],
+    [ "esp:26", "r2:1", "yellow", [] ],
+    [ "r2:2", "led2:A", "yellow", [] ],
+    [ "led2:C", "esp:GND.2", "black", [] ],
+    [ "esp:27", "r3:1", "green", [] ],
+    [ "r3:2", "led3:A", "green", [] ],
+    [ "led3:C", "esp:GND.2", "black", [] ],
+
+    [ "esp:14", "bz1:2", "purple", [] ],
+    [ "bz1:1", "esp:GND.2", "black", [] ],
+
+    [ "esp:32", "btnConf:1.l", "green", [] ],
+    [ "btnConf:2.l", "esp:GND.1", "black", [] ],
+    [ "esp:33", "btnPosp:1.l", "blue", [] ],
+    [ "btnPosp:2.l", "esp:GND.1", "black", [] ]
+  ],
+  "dependencies": {}
+}
