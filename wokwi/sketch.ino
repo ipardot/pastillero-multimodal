@@ -29,9 +29,9 @@ const int ANGULO_REPOSO = 0;
 const int ANGULO_COMP[3] = {45, 90, 135};
 
 // Escalamiento (tiempo REAL desde que se dispensa). Valores de demo.
-const unsigned long T_SONIDO_MS   = 10000;  // 10 s sin respuesta -> buzzer
-const unsigned long T_OMITIDA_MS  = 25000;  // 25 s sin respuesta -> omitida
-const unsigned long T_POSPONER_MS = 8000;   // pausa al posponer
+const unsigned long T_SONIDO_MS   = 6000;   // 6 s sin respuesta -> buzzer
+const unsigned long T_OMITIDA_MS  = 16000;  // 16 s sin respuesta -> omitida
+const unsigned long T_POSPONER_MS = 5000;   // pausa al posponer
 const int MAX_POSPOSICIONES = 1;
 const unsigned long T_AVISO_INICIAL_MS = 800;  // 2 pitidos cortos al dispensar
 

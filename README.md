@@ -45,7 +45,7 @@ Abre la app unos minutos antes de la sustentación.
 1. Configuración: muestra la receta y la guía de carga.
 2. Sidebar: velocidad **x60** y "Fijar hora" en 07:58.
 3. A las 08:00 simuladas: dos pitidos, gira el servo y se enciende el LED 1. Pulsa **Confirmar** en Wokwi.
-4. "Simular toma ahora" con otra toma y no hagas nada: a los 10 s suena el buzzer y a los 25 s queda omitida.
+4. "Simular toma ahora" con otra toma y no hagas nada: a los 6 s suena el buzzer y a los 16 s queda omitida.
 5. Otra toma: **Posponer**, y luego confirma con el botón de la app.
 6. Historial: confirmadas, pospuestas y omitidas, con su canal.
 
@@ -57,4 +57,4 @@ No uses velocidades muy altas con tomas separadas pocas horas: a x600 dos tomas 
 - La app debe estar abierta para que el reloj dispare tomas; el ESP32 depende de la app para saber la hora.
 - Se registra toma *confirmada*, no verificada. No valida dosis ni interacciones. No es un dispositivo médico.
 - Un compartimento = un medicamento, y una toma a la vez. El sistema no puede verificar qué hay dentro de cada compartimento.
-- Los tiempos de escalamiento del ESP32 (10 s sonido, 25 s omitida, 8 s posponer) son tiempo real y de demo.
+- Los tiempos de escalamiento del ESP32 (6 s sonido, 16 s omitida, 5 s posponer; en un producto real serían minutos) son tiempo real y de demo.
