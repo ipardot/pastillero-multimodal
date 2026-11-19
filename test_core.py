@@ -148,4 +148,17 @@ core.reiniciar_demo()
 assert core.eventos(False) == []
 print("OK: reiniciar demo")
 
+# 11) Emptying the prescription sticks (init_db must not re-seed it)
+for toma in core.get_receta():
+    core.delete_toma(toma["id"])
+core.init_db()
+core.init_db()
+assert core.get_receta() == [], "la receta vacía no debe volver a llenarse"
+assert core.guia_de_carga()[0]["med"] is None
+core.cargar_ejemplo()
+assert len(core.get_receta()) == 3
+core.vaciar_receta()
+assert core.get_receta() == []
+print("OK: receta vacía se mantiene y el ejemplo se puede recargar")
+
 print("\nTODAS LAS PRUEBAS PASARON")

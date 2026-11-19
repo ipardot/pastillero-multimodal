@@ -32,7 +32,7 @@ st.subheader("Receta por compartimento")
 st.caption("Carga cada medicamento en su compartimento numerado. El sistema no puede verificar qué hay dentro.")
 receta = core.get_receta()
 if not receta:
-    st.info("Aún no hay tomas. Agrega la primera con el formulario.")
+    st.info("Aún no hay tomas. Agrega la primera con el formulario o carga la receta de ejemplo.")
 for k in (1, 2, 3):
     tomas = [t for t in receta if t["comp"] == k]
     with st.container(key=f"carril{k}"):
@@ -49,3 +49,12 @@ for k in (1, 2, 3):
             if c2.button("Quitar", key=f"del_{t['id']}", help="Eliminar esta toma"):
                 core.delete_toma(t["id"])
                 st.rerun()
+
+st.write("")
+b1, b2 = st.columns(2)
+if b1.button("Cargar receta de ejemplo", width="stretch", help="Reemplaza la receta actual por una de ejemplo"):
+    core.cargar_ejemplo()
+    st.rerun()
+if receta and b2.button("Vaciar receta", width="stretch", help="Elimina todas las tomas"):
+    core.vaciar_receta()
+    st.rerun()
