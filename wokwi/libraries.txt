@@ -1,4 +1,3 @@
-# Librerías del proyecto Wokwi (una por línea)
 PubSubClient
 ArduinoJson
 ESP32Servo

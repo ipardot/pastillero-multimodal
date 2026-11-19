@@ -1,295 +1,245 @@
 // Pastillero multimodal - firmware ESP32 (Wokwi)
-// Proyecto final Interfaces Multimodales - EAFIT
-//
-// El ESP32 NO conoce la hora real: la app Streamlit decide cuándo toca cada
-// toma y envía "dispensar" por MQTT. Aquí solo se reacciona y se mide el
-// escalamiento con millis(). Prototipo de baja fidelidad: no es un dispositivo médico.
+// El reloj vive en la app: este firmware solo reacciona a órdenes por MQTT
+// y mide sus propios tiempos de escalamiento con millis() (tiempo real).
 
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 #include <ESP32Servo.h>
 
-// ---------------- Configuración ----------------
-const char* WIFI_SSID = "Wokwi-GUEST";
+// ---------- Configuración ----------
+const char* WIFI_SSID = "Wokwi-GUEST";   // red simulada de Wokwi
 const char* WIFI_PASS = "";
-const int   WIFI_CANAL = 6;
-
 const char* MQTT_HOST = "broker.hivemq.com";
-const int   MQTT_PORT = 1883;
-// Debe coincidir con PASTILLERO_PREFIX en la app y ser único (broker compartido).
-const char* PREFIJO = "eafit/julian/pastillero";
+const uint16_t MQTT_PORT = 1883;
 
-// Tiempos de escalamiento (milisegundos, tiempo real)
-const unsigned long T_SONAR_MS      = 10000;  // sin respuesta -> buzzer
-const unsigned long T_OMITIR_MS     = 25000;  // sin respuesta -> omitida
-const unsigned long T_POSPONER_MS   = 8000;   // silencio al posponer
-const unsigned long BEEP_CICLO_MS   = 300;    // ciclo del buzzer intermitente
-const unsigned int  BEEP_FREQ_HZ    = 1000;
-const unsigned long DEBOUNCE_MS     = 250;
-const unsigned long REINTENTO_MS    = 2000;   // reconexión WiFi/MQTT
+// IMPORTANTE: debe coincidir con PASTILLERO_PREFIX de la app.
+const char* TOPIC_CMD    = "eafit/julian/pastillero/cmd";     // app -> ESP32
+const char* TOPIC_ESTADO = "eafit/julian/pastillero/estado";  // ESP32 -> app
 
 // Pines
-const int PIN_SERVO     = 18;
-const int PIN_LED[3]    = {25, 26, 27};
-const int PIN_BUZZER    = 14;
-const int PIN_CONFIRMAR = 32;
-const int PIN_POSPONER  = 33;
+const int PIN_SERVO = 18;
+const int PIN_LED[3] = {25, 26, 27};
+const int PIN_BUZZER = 14;
+const int PIN_BTN_CONFIRMAR = 32;
+const int PIN_BTN_POSPONER = 33;
 
-// Ángulos del servo
-const int ANG_REPOSO  = 0;
-const int ANG_COMP[3] = {45, 90, 135};
+// Servo: ángulo de reposo y de cada compartimento
+const int ANGULO_REPOSO = 0;
+const int ANGULO_COMP[3] = {45, 90, 135};
 
-// ---------------- Estado ----------------
-WiFiClient wifiClient;
-PubSubClient mqtt(wifiClient);
+// Escalamiento (tiempo REAL desde que se dispensa). Valores de demo.
+const unsigned long T_SONIDO_MS   = 10000;  // 10 s sin respuesta -> buzzer
+const unsigned long T_OMITIDA_MS  = 25000;  // 25 s sin respuesta -> omitida
+const unsigned long T_POSPONER_MS = 8000;   // pausa al posponer
+const int MAX_POSPOSICIONES = 1;
+const unsigned long T_AVISO_INICIAL_MS = 800;  // 2 pitidos cortos al dispensar
+
+// ---------- Estado ----------
+WiFiClient wifi;
+PubSubClient mqtt(wifi);
 Servo servo;
 
-String topicCmd;
-String topicEstado;
-
-bool   activa = false;           // hay una toma en curso
+bool enAlerta = false;
 String tomaId = "";
 String tomaMed = "";
-int    tomaComp = 0;
-unsigned long t0 = 0;            // inicio del cronómetro de escalamiento
-bool   sonando = false;          // buzzer en fase intermitente
-bool   sonandoPublicado = false;
-bool   pospuestaUsada = false;   // máximo 1 posposición por toma
-bool   enPosposicion = false;
-unsigned long tPosp = 0;
-
-bool   beepOn = false;
-unsigned long tBeep = 0;
-
-unsigned long tUltimoIntento = 0;
+int tomaComp = 1;
+unsigned long tInicio = 0;
+unsigned long posponeHasta = 0;  // 0 = no pospuesta
+int posposiciones = 0;
+bool sonando = false;
+bool tonoActivo = false;
 
 struct Boton {
   int pin;
-  int ultimo;           // última lectura estable
-  unsigned long tCambio;
+  bool previo;
+  unsigned long ultimo;
 };
-Boton btnConfirmar = {PIN_CONFIRMAR, HIGH, 0};
-Boton btnPosponer  = {PIN_POSPONER,  HIGH, 0};
+Boton btnConfirmar = {PIN_BTN_CONFIRMAR, false, 0};
+Boton btnPosponer = {PIN_BTN_POSPONER, false, 0};
 
-// ---------------- Utilidades ----------------
-void publicarEvento(const char* evento, const char* canal, bool conToma) {
-  if (!mqtt.connected()) return;
+// ---------- Utilidades ----------
+void publicar(const char* evento, const char* canal = "") {
   JsonDocument doc;
   doc["evento"] = evento;
-  if (conToma) {
+  if (tomaId.length() > 0) {
     doc["id"] = tomaId;
     doc["med"] = tomaMed;
     doc["comp"] = tomaComp;
   }
-  doc["canal"] = canal;
+  if (strlen(canal) > 0) doc["canal"] = canal;
   char buf[256];
   size_t n = serializeJson(doc, buf, sizeof(buf));
-  mqtt.publish(topicEstado.c_str(), (const uint8_t*)buf, n, false);
-  Serial.print("[pub] ");
+  mqtt.publish(TOPIC_ESTADO, (const uint8_t*)buf, n, false);
+  Serial.print("-> ");
   Serial.println(buf);
 }
 
-void buzzerOff() {
+void silenciar() {
   noTone(PIN_BUZZER);
-  beepOn = false;
+  tonoActivo = false;
+  sonando = false;
 }
 
 void apagarTodo() {
-  buzzerOff();
+  silenciar();
   for (int i = 0; i < 3; i++) digitalWrite(PIN_LED[i], LOW);
-  servo.write(ANG_REPOSO);
+  servo.write(ANGULO_REPOSO);
 }
 
-// Regla: publicar SIEMPRE el evento antes de borrar el id de la toma.
-void cerrarToma(const char* evento, const char* canal) {
-  publicarEvento(evento, canal, true);
-  apagarTodo();
-  activa = false;
-  tomaId = "";
-  tomaMed = "";
-  tomaComp = 0;
-  sonando = false;
-  sonandoPublicado = false;
-  enPosposicion = false;
-  pospuestaUsada = false;
-}
-
-// ---------------- Acciones ----------------
-void dispensar(const String& id, const String& med, int comp) {
-  if (comp < 1 || comp > 3) {
-    Serial.println("[cmd] compartimento inválido, ignorado");
-    return;
-  }
-  if (activa) {
-    cerrarToma("omitida", "esp32");  // la nueva orden reemplaza a la anterior
-  }
+void iniciarToma(const String& id, const String& med, int comp) {
   tomaId = id;
   tomaMed = med;
-  tomaComp = comp;
-  activa = true;
+  tomaComp = constrain(comp, 1, 3);
+  posponeHasta = 0;
+  posposiciones = 0;
   sonando = false;
-  sonandoPublicado = false;
-  pospuestaUsada = false;
-  enPosposicion = false;
-  servo.write(ANG_COMP[comp - 1]);
-  digitalWrite(PIN_LED[comp - 1], HIGH);
-  publicarEvento("dispensado", "esp32", true);
-  t0 = millis();
+  tInicio = millis();
+  enAlerta = true;
+  servo.write(ANGULO_COMP[tomaComp - 1]);
+  digitalWrite(PIN_LED[tomaComp - 1], HIGH);
+  publicar("dispensado");
 }
 
-void confirmar(const char* canal) {
-  if (!activa) return;
-  cerrarToma("confirmada", canal);
+void cerrarToma(const char* evento, const char* canal) {
+  publicar(evento, canal);  // publica antes de borrar el id
+  apagarTodo();
+  enAlerta = false;
+  tomaId = "";
 }
 
 void posponer(const char* canal) {
-  if (!activa || pospuestaUsada) return;
-  pospuestaUsada = true;
-  enPosposicion = true;
-  tPosp = millis();
-  sonando = false;
-  buzzerOff();                       // LED se mantiene encendido
-  publicarEvento("pospuesta", canal, true);
-}
-
-// ---------------- MQTT ----------------
-void onMensaje(char* topic, byte* payload, unsigned int length) {
-  JsonDocument doc;
-  DeserializationError err = deserializeJson(doc, payload, length);
-  if (err) {
-    Serial.println("[cmd] JSON inválido");
+  if (posposiciones >= MAX_POSPOSICIONES) {
+    Serial.println("Sin posposiciones disponibles");
     return;
   }
+  posposiciones++;
+  posponeHasta = millis() + T_POSPONER_MS;
+  silenciar();
+  publicar("pospuesta", canal);
+}
+
+// ---------- MQTT ----------
+void onMensaje(char* topic, byte* payload, unsigned int len) {
+  JsonDocument doc;
+  if (deserializeJson(doc, payload, len)) return;
   const char* accion = doc["accion"] | "";
-  String id = doc["id"] | "";
-  Serial.print("[cmd] ");
-  Serial.println(accion);
 
   if (strcmp(accion, "dispensar") == 0) {
+    if (enAlerta) cerrarToma("omitida", "esp32");  // la anterior queda omitida
+    String id = doc["id"] | "";
     String med = doc["med"] | "";
-    int comp = doc["comp"] | 0;
-    dispensar(id, med, comp);
+    iniciarToma(id, med, doc["comp"] | 1);
   } else if (strcmp(accion, "confirmar") == 0) {
-    if (activa && id == tomaId) confirmar("app_boton");
+    if (enAlerta) cerrarToma("confirmada", "app_boton");
   } else if (strcmp(accion, "posponer") == 0) {
-    if (activa && id == tomaId) posponer("app_boton");
+    if (enAlerta) posponer("app_boton");
   }
 }
 
-void mantenerConexion() {
-  unsigned long ahora = millis();
-  if (WiFi.status() != WL_CONNECTED) {
-    if (ahora - tUltimoIntento >= REINTENTO_MS) {
-      tUltimoIntento = ahora;
-      Serial.println("[wifi] reintentando...");
-      WiFi.disconnect();
-      WiFi.begin(WIFI_SSID, WIFI_PASS, WIFI_CANAL);
-    }
-    return;
+void asegurarMqtt() {
+  if (mqtt.connected()) return;
+  static unsigned long ultimo = 0;
+  if (millis() - ultimo < 2000) return;
+  ultimo = millis();
+  String cid = "esp32-pastillero-" + String((uint32_t)esp_random(), HEX);
+  Serial.print("Conectando MQTT... ");
+  if (mqtt.connect(cid.c_str())) {
+    Serial.println("ok");
+    mqtt.subscribe(TOPIC_CMD);
+    publicar("online");
+  } else {
+    Serial.print("fallo rc=");
+    Serial.println(mqtt.state());
   }
-  if (!mqtt.connected()) {
-    if (ahora - tUltimoIntento >= REINTENTO_MS) {
-      tUltimoIntento = ahora;
-      String cid = "pastillero-esp32-" + String((uint32_t)esp_random(), HEX);
-      Serial.print("[mqtt] conectando como ");
-      Serial.println(cid);
-      if (mqtt.connect(cid.c_str())) {
-        mqtt.subscribe(topicCmd.c_str());
-        publicarEvento("online", "esp32", false);
-      } else {
-        Serial.print("[mqtt] fallo rc=");
-        Serial.println(mqtt.state());
-      }
-    }
-    return;
-  }
-  mqtt.loop();
 }
 
-// ---------------- Pulsadores ----------------
-// Devuelve true en el flanco de bajada (pulsado), con debounce.
-bool flancoPulsado(Boton& b) {
-  int lectura = digitalRead(b.pin);
-  unsigned long ahora = millis();
-  if (lectura != b.ultimo && ahora - b.tCambio >= DEBOUNCE_MS) {
-    b.tCambio = ahora;
-    b.ultimo = lectura;
-    return lectura == LOW;
-  }
-  return false;
+// ---------- Botones y alerta ----------
+bool flanco(Boton& b) {
+  bool ahora = digitalRead(b.pin) == LOW;  // INPUT_PULLUP
+  bool pulso = ahora && !b.previo && (millis() - b.ultimo > 250);
+  if (pulso) b.ultimo = millis();
+  b.previo = ahora;
+  return pulso;
 }
 
-// ---------------- Escalamiento ----------------
-void actualizarEscalamiento() {
-  if (!activa) return;
+void revisarBotones() {
+  if (flanco(btnConfirmar)) {
+    if (enAlerta) cerrarToma("confirmada", "pulsador_fisico");
+    else Serial.println("Confirmar: no hay toma pendiente");
+  }
+  if (flanco(btnPosponer)) {
+    if (enAlerta) posponer("pulsador_fisico");
+  }
+}
+
+void ponerTono(bool encender) {
+  if (encender && !tonoActivo) {
+    tone(PIN_BUZZER, 1000);
+    tonoActivo = true;
+  } else if (!encender && tonoActivo) {
+    noTone(PIN_BUZZER);
+    tonoActivo = false;
+  }
+}
+
+void actualizarAlerta() {
+  if (!enAlerta) return;
   unsigned long ahora = millis();
 
-  if (enPosposicion) {
-    if (ahora - tPosp >= T_POSPONER_MS) {
-      enPosposicion = false;
-      t0 = ahora;                    // reinicia el cronómetro
-      sonandoPublicado = false;
+  if (posponeHasta != 0) {  // pospuesta: LED encendido, sin sonido
+    if ((long)(ahora - posponeHasta) >= 0) {
+      posponeHasta = 0;
+      tInicio = ahora;  // reinicia el escalamiento
     }
     return;
   }
 
-  unsigned long dt = ahora - t0;
-  if (dt >= T_OMITIR_MS) {
+  unsigned long t = ahora - tInicio;
+  if (t >= T_OMITIDA_MS) {
     cerrarToma("omitida", "esp32");
     return;
   }
-  if (dt >= T_SONAR_MS) {
+  if (t >= T_SONIDO_MS) {
     if (!sonando) {
       sonando = true;
-      tBeep = ahora;
-      beepOn = true;
-      tone(PIN_BUZZER, BEEP_FREQ_HZ);
+      publicar("sonando", "buzzer");
     }
-    if (!sonandoPublicado) {
-      sonandoPublicado = true;
-      publicarEvento("sonando", "buzzer", true);
-    }
-    if (ahora - tBeep >= BEEP_CICLO_MS) {
-      tBeep = ahora;
-      beepOn = !beepOn;
-      if (beepOn) tone(PIN_BUZZER, BEEP_FREQ_HZ);
-      else noTone(PIN_BUZZER);
-    }
+    ponerTono(((ahora / 300) % 2) == 0);  // pitido intermitente continuo
+  } else if (t < T_AVISO_INICIAL_MS) {
+    ponerTono((t % 400) < 200);  // aviso inicial: 2 pitidos cortos
+  } else {
+    ponerTono(false);  // silencio hasta que toque escalar
   }
 }
 
-// ---------------- Setup / loop ----------------
+// ---------- Arduino ----------
 void setup() {
   Serial.begin(115200);
-  for (int i = 0; i < 3; i++) {
-    pinMode(PIN_LED[i], OUTPUT);
-    digitalWrite(PIN_LED[i], LOW);
-  }
+  for (int i = 0; i < 3; i++) pinMode(PIN_LED[i], OUTPUT);
   pinMode(PIN_BUZZER, OUTPUT);
-  pinMode(PIN_CONFIRMAR, INPUT_PULLUP);
-  pinMode(PIN_POSPONER, INPUT_PULLUP);
+  pinMode(PIN_BTN_CONFIRMAR, INPUT_PULLUP);
+  pinMode(PIN_BTN_POSPONER, INPUT_PULLUP);
 
-  servo.setPeriodHertz(50);
   servo.attach(PIN_SERVO, 500, 2400);
-  servo.write(ANG_REPOSO);
+  servo.write(ANGULO_REPOSO);
 
-  topicCmd = String(PREFIJO) + "/cmd";
-  topicEstado = String(PREFIJO) + "/estado";
+  Serial.print("WiFi");
+  WiFi.begin(WIFI_SSID, WIFI_PASS, 6);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(250);
+    Serial.print(".");
+  }
+  Serial.println(" conectado");
 
   mqtt.setServer(MQTT_HOST, MQTT_PORT);
   mqtt.setCallback(onMensaje);
   mqtt.setBufferSize(512);
-
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_PASS, WIFI_CANAL);
-  tUltimoIntento = millis();
-  Serial.println("Pastillero iniciado");
 }
 
 void loop() {
-  mantenerConexion();
-  if (flancoPulsado(btnConfirmar)) confirmar("pulsador_fisico");
-  if (flancoPulsado(btnPosponer)) posponer("pulsador_fisico");
-  actualizarEscalamiento();
+  asegurarMqtt();
+  mqtt.loop();
+  revisarBotones();
+  actualizarAlerta();
 }
