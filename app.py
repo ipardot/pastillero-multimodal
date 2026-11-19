@@ -3,9 +3,10 @@ from datetime import datetime
 import streamlit as st
 
 import core
+import estilos
 
 # Page config must be the first Streamlit command
-st.set_page_config(page_title="Pastillero multimodal", page_icon="💊")
+st.set_page_config(page_title="Pastillero multimodal", page_icon="💊", layout="centered")
 
 # Init database and open the MQTT connection (one per process)
 try:
@@ -21,12 +22,7 @@ def reloj():
     # Simulated clock: every second compute the time and fire due doses
     try:
         now = core.tick()
-        st.metric("Hora simulada", now.strftime("%H:%M:%S"))
-        st.caption(f"Velocidad: 1 s real = {core.get_speed():g} s simulados")
-        if core.conectado():
-            st.caption("🟢 MQTT conectado")
-        else:
-            st.caption("🔴 MQTT sin conexión")
+        estilos.reloj(now.strftime("%H:%M:%S"), core.get_speed(), core.conectado())
     except Exception as e:
         st.error(f"Error en el reloj: {str(e)}")
 
@@ -47,7 +43,7 @@ with st.sidebar:
         port = st.number_input("Puerto", min_value=1, max_value=65535, value=cfg["port"])
         prefix = st.text_input("Prefijo de tópicos", cfg["prefix"])
         cid = st.text_input("Client ID", cfg["client_id"])
-        if st.button("Aplicar conexión"):
+        if st.button("Aplicar conexión", width="stretch"):
             ok = False
             try:
                 core.set_mqtt_config(broker, port, prefix, cid)
@@ -57,7 +53,8 @@ with st.sidebar:
             if ok:
                 st.rerun()
 
-    st.subheader("Panel de demo")
+    st.divider()
+    st.subheader("🎛️ Panel de demo")
     velocidades = [1, 10, 60, 300]
     actual = core.get_speed()
     if actual not in velocidades:
@@ -73,7 +70,7 @@ with st.sidebar:
         st.rerun()
 
     t_ini = st.time_input("Fijar hora simulada", value=core.hora_sim().time(), step=60)
-    if st.button("Fijar hora"):
+    if st.button("Fijar hora", width="stretch"):
         core.set_clock(datetime.combine(core.hora_sim().date(), t_ini), core.get_speed())
         st.rerun()
 
@@ -84,7 +81,7 @@ with st.sidebar:
             receta,
             format_func=lambda t: f"{t['med']} ({t['hora']}, comp. {t['comp']})",
         )
-        if st.button("Simular toma ahora"):
+        if st.button("▶️ Simular toma ahora", type="primary", width="stretch"):
             try:
                 if core.simular_toma(sel):
                     st.toast("Orden enviada al pastillero")
@@ -93,7 +90,7 @@ with st.sidebar:
             except Exception as e:
                 st.error(f"Error al enviar la orden: {str(e)}")
 
-    if st.button("Reiniciar demo"):
+    if st.button("🔄 Reiniciar demo", width="stretch"):
         core.reiniciar_demo()
         st.rerun()
 
