@@ -53,7 +53,7 @@ No uses velocidades muy altas con tomas separadas pocas horas: a x600 dos tomas 
 
 ## Decisiones y límites
 - Estado en SQLite y no en `st.session_state`: el callback de MQTT corre en otro hilo.
-- El cliente MQTT es único por proceso y se reconstruye al cambiar la configuración.
+- El cliente MQTT es único por proceso, se reconstruye al cambiar la configuración y su Client ID lleva un sufijo aleatorio (dos apps abiertas, por ejemplo local y en la nube, no se expulsan entre sí).
 - La app debe estar abierta para que el reloj dispare tomas; el ESP32 depende de la app para saber la hora.
 - Se registra toma *confirmada*, no verificada. No valida dosis ni interacciones. No es un dispositivo médico.
 - Un compartimento = un medicamento, y una toma a la vez. El sistema no puede verificar qué hay dentro de cada compartimento.

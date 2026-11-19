@@ -161,4 +161,18 @@ core.vaciar_receta()
 assert core.get_receta() == []
 print("OK: receta vacía se mantiene y el ejemplo se puede recargar")
 
+# 12) Hot reload of core.py must not create a second MQTT client (duplicate IDs loop)
+import importlib
+
+real = core.__dict__.pop("client")  # drop the fake installed at the top
+importlib.reload(core)
+c1 = core.client()
+importlib.reload(core)
+c2 = core.client()
+assert c1 is c2, "tras recargar core.py debe seguir el mismo cliente"
+assert c1._client_id.decode().startswith(core.mqtt_config()["client_id"] + "-")
+c1.loop_stop()
+c1.disconnect()
+print("OK: recarga de core.py conserva un solo cliente MQTT")
+
 print("\nTODAS LAS PRUEBAS PASARON")
