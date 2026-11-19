@@ -63,8 +63,12 @@ def init_db():
             CREATE TABLE IF NOT EXISTS disparos (clave TEXT PRIMARY KEY);
             """
         )
-        if con.execute("SELECT COUNT(*) FROM receta").fetchone()[0] == 0:
-            con.executemany("INSERT INTO receta VALUES (?,?,?,?)", RECETA_EJEMPLO)
+        vacia = con.execute("SELECT COUNT(*) FROM receta").fetchone()[0] == 0
+    # Seed the sample prescription only once, so the user can empty it for good
+    if kv_get("receta_sembrada") is None:
+        if vacia:
+            cargar_ejemplo()
+        kv_set(receta_sembrada="1")
     if kv_get("mqtt_client_id") is None:
         kv_set(mqtt_client_id="pastillero-app-" + uuid.uuid4().hex[:6])
     if kv_get("sim_start") is None:
@@ -120,6 +124,18 @@ def add_toma(med: str, hora: str, comp: int):
             ("t" + uuid.uuid4().hex[:6], med, hora, comp),
         )
     return True, f"Guardado: {med} a las {hora} (compartimento {comp})."
+
+
+def cargar_ejemplo():
+    """Replace the prescription with the sample one."""
+    with db() as con:
+        con.execute("DELETE FROM receta")
+        con.executemany("INSERT INTO receta VALUES (?,?,?,?)", RECETA_EJEMPLO)
+
+
+def vaciar_receta():
+    with db() as con:
+        con.execute("DELETE FROM receta")
 
 
 def delete_toma(toma_id: str):
