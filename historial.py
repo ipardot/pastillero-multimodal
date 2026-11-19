@@ -5,13 +5,13 @@ import core
 import estilos
 
 estilos.aplicar()
-st.title("📋 Historial de tomas")
-st.info(
-    "Las tomas se registran como **confirmadas por el usuario** (pulsador o botón). "
+st.title("Historial de tomas")
+st.caption(
+    "Cada toma queda como **confirmada por el usuario** (pulsador o botón). "
     "El sistema no verifica que la pastilla se haya ingerido."
 )
 
-ETIQUETA = {k: f"{v[0]} {v[1]}" for k, v in estilos.ESTADOS.items()}
+ETIQUETA = {k: v[0] for k, v in estilos.ESTADOS.items()}
 
 
 @st.fragment(run_every=2)
@@ -22,14 +22,14 @@ def tabla():
             st.info("Aún no hay registros. Simula una toma desde el panel lateral.")
             return
         df = pd.DataFrame(ev)
-        estilos.estadisticas(
+        estilos.adherencia(
             int((df["evento"] == "confirmada").sum()),
-            int((df["evento"] == "pospuesta").sum()),
             int((df["evento"] == "omitida").sum()),
+            int((df["evento"] == "pospuesta").sum()),
         )
 
         filtro = st.pills(
-            "Filtrar por estado",
+            "Mostrar",
             ["confirmada", "pospuesta", "omitida"],
             default=["confirmada", "pospuesta", "omitida"],
             selection_mode="multi",
@@ -49,7 +49,7 @@ def tabla():
         )
         st.dataframe(vista, hide_index=True, width="stretch")
         st.download_button(
-            "⬇️ Descargar CSV para el doctor",
+            "Descargar CSV para el doctor",
             vista.to_csv(index=False).encode("utf-8"),
             file_name="historial_pastillero.csv",
             mime="text/csv",

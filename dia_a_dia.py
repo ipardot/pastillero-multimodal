@@ -5,55 +5,57 @@ import core
 import estilos
 
 estilos.aplicar()
-st.title("💊 Día a día")
 
 
 @st.fragment(run_every=1)
-def estado():
+def tablero():
     try:
         now = core.hora_sim()
         p = core.pendiente()
         guia = core.guia_de_carga()
+        ult = core.ultimo_evento(p["toma_id"]) if p else None
 
-        if p:
-            ult = core.ultimo_evento(p["toma_id"])
-            if ult == "sonando":
-                estilos.hero(
-                    "Atención", f"Toma {p['med']} ahora",
-                    f"El pastillero está sonando · compartimento {p['comp']}", "alerta", pulso=True,
-                )
-            elif ult == "pospuesta":
-                estilos.hero(
-                    "Pospuesta", f"{p['med']}",
-                    f"Volverá a avisar en unos segundos · compartimento {p['comp']}", "aviso",
-                )
-            else:
-                estilos.hero(
-                    "Es hora de tu toma", f"{p['med']}",
-                    f"Toma la pastilla del compartimento {p['comp']}", "aviso", pulso=True,
-                )
-            c1, c2 = st.columns(2)
-            if c1.button("✅ Ya la tomé", type="primary", width="stretch"):
-                if core.comando_toma("confirmar"):
-                    st.toast("Confirmación enviada al pastillero")
+        izq, der = st.columns([1, 1], vertical_alignment="center", gap="large")
+        with izq:
+            estilos.carrusel(
+                guia,
+                activo=p["comp"] if p else None,
+                hora=now.strftime("%H:%M"),
+                segundos=now.strftime(":%S"),
+                alerta=(ult == "sonando"),
+            )
+        with der:
+            if p:
+                if ult == "sonando":
+                    estilos.estado("Suena en el pastillero", f"Toma {p['med']} del compartimento {p['comp']} y confírmalo.", estilos.BAD)
+                elif ult == "pospuesta":
+                    estilos.estado("Pospuesta", f"Volverá a avisar para {p['med']} (compartimento {p['comp']}).", "#8A6D1F")
                 else:
-                    st.error("Sin conexión MQTT: no se envió la confirmación")
-            if c2.button("⏰ Posponer", width="stretch"):
-                if core.comando_toma("posponer"):
-                    st.toast("Posposición enviada")
-                else:
-                    st.error("Sin conexión MQTT: no se envió la posposición")
-            estilos.compartimentos(guia, activo=p["comp"], tono_activo="alerta" if ult == "sonando" else "aviso")
-        else:
-            toma, due = core.proxima_toma(now)
-            if toma:
-                estilos.hero(
-                    "Todo al día · próxima toma", f"{toma['med']} a las {due:%H:%M}",
-                    f"Compartimento {toma['comp']}", "ok",
-                )
+                    estilos.estado(f"Toca {p['med']}", f"Está en el compartimento {p['comp']}, justo bajo la abertura.", estilos.COMP[p["comp"]])
+                st.write("")
+                if st.button("Ya la tomé", type="primary", width="stretch"):
+                    if core.comando_toma("confirmar"):
+                        st.toast("Confirmación enviada al pastillero")
+                    else:
+                        st.error("Sin conexión MQTT: no se envió la confirmación")
+                if st.button("Posponer", width="stretch"):
+                    if core.comando_toma("posponer"):
+                        st.toast("Posposición enviada")
+                    else:
+                        st.error("Sin conexión MQTT: no se envió la posposición")
             else:
-                estilos.hero("Sin receta", "No hay tomas configuradas", "Ve a Configuración para agregarlas.", "info")
-            estilos.compartimentos(guia, activo=toma["comp"] if toma else None, tono_activo="ok")
+                toma, due = core.proxima_toma(now)
+                if toma:
+                    estilos.estado(
+                        "Todo al día",
+                        f"Próxima toma: {toma['med']} a las {due:%H:%M}, compartimento {toma['comp']}.",
+                        estilos.OK,
+                    )
+                else:
+                    estilos.estado("Sin receta", "Agrega tus tomas en Configuración.")
+
+        st.subheader("Hoy")
+        estilos.linea_del_dia(core.estado_dia(now.date()), now)
 
         st.subheader("Últimos eventos")
         ev = core.eventos(solo_finales=False, limite=6)
@@ -65,7 +67,7 @@ def estado():
         st.error(f"Error al mostrar el estado: {str(e)}")
 
 
-estado()
+tablero()
 
 # Optional concept image: add pastillero.png to the repo root
 try:
