@@ -263,9 +263,16 @@ def _on_message(client, userdata, msg):
     handle_estado(msg.payload)
 
 
-# One client per process; rebuilt only when the MQTT settings change
-_cli = {"key": None, "c": None}
-_lock = threading.Lock()
+# One client per process; rebuilt only when the MQTT settings change.
+# The holder lives on the paho module so it survives Streamlit's hot reload of
+# core.py (a reload would otherwise leave an old client alive with the same ID,
+# and the broker would kick each one out in a loop).
+_cli = getattr(mqtt, "_pastillero_cli", None)
+if _cli is None:
+    _cli = mqtt._pastillero_cli = {"key": None, "c": None}
+_lock = getattr(mqtt, "_pastillero_lock", None)
+if _lock is None:
+    _lock = mqtt._pastillero_lock = threading.Lock()
 
 
 def client():
@@ -279,7 +286,9 @@ def client():
                     _cli["c"].disconnect()
                 except Exception:
                     pass
-            c = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=cfg["client_id"])
+            # Random suffix: two apps (local + cloud) never share an ID and kick each other out
+            cid = f"{cfg['client_id']}-{uuid.uuid4().hex[:4]}"
+            c = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=cid)
             c.user_data_set({"prefix": cfg["prefix"]})
             c.on_connect = _on_connect
             c.on_message = _on_message
