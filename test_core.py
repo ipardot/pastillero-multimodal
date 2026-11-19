@@ -119,6 +119,17 @@ guia = core.guia_de_carga()
 assert guia[0]["med"] == "Vitamina D" and guia[0]["horas"] == "06:00, 08:00, 16:00"
 print("OK: validaciones de la receta y guía de carga")
 
+# 8b) Day status for the timeline (08:00 was confirmed in step 4)
+dia = datetime(2026, 11, 22).date()
+est = {e["med"] + e["hora"]: e["estado"] for e in core.estado_dia(dia)}
+assert est["Vitamina D08:00"] == "confirmada" and est["Omega 312:00"] == "sin_disparar", est
+seis = [e for e in core.estado_dia(dia) if e["hora"] == "06:00"][0]
+tid = f"{seis['id']}@202611220600"
+core.registrar_evento(tid, "Vitamina D", 1, "enviada")
+core.registrar_evento(tid, "Vitamina D", 1, "omitida", "esp32")
+assert [e for e in core.estado_dia(dia) if e["hora"] == "06:00"][0]["estado"] == "omitida"
+print("OK: estado del día")
+
 # 9) MQTT settings
 core.set_mqtt_config(" broker.test ", 1884, "/eafit/prueba/pastillero/", "cid-1")
 cfg = core.mqtt_config()

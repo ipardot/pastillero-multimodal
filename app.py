@@ -6,7 +6,7 @@ import core
 import estilos
 
 # Page config must be the first Streamlit command
-st.set_page_config(page_title="Pastillero multimodal", page_icon="💊", layout="centered")
+st.set_page_config(page_title="Pastillero multimodal", page_icon="💊", layout="wide")
 
 # Init database and open the MQTT connection (one per process)
 try:
@@ -28,7 +28,7 @@ def reloj():
 
 
 with st.sidebar:
-    st.subheader("💊 Pastillero multimodal")
+    st.subheader("Pastillero multimodal")
     st.caption(
         "Simula un pastillero conectado: la app decide cuándo toca cada toma, "
         "el ESP32 (Wokwi) avisa con servo, LED y buzzer, y el historial guarda "
@@ -54,7 +54,7 @@ with st.sidebar:
                 st.rerun()
 
     st.divider()
-    st.subheader("🎛️ Panel de demo")
+    st.subheader("Panel de demo")
     velocidades = [1, 10, 60, 300]
     actual = core.get_speed()
     if actual not in velocidades:
@@ -81,7 +81,7 @@ with st.sidebar:
             receta,
             format_func=lambda t: f"{t['med']} ({t['hora']}, comp. {t['comp']})",
         )
-        if st.button("▶️ Simular toma ahora", type="primary", width="stretch"):
+        if st.button("Simular toma ahora", type="primary", width="stretch"):
             try:
                 if core.simular_toma(sel):
                     st.toast("Orden enviada al pastillero")
@@ -90,15 +90,15 @@ with st.sidebar:
             except Exception as e:
                 st.error(f"Error al enviar la orden: {str(e)}")
 
-    if st.button("🔄 Reiniciar demo", width="stretch"):
+    if st.button("Reiniciar demo", width="stretch"):
         core.reiniciar_demo()
         st.rerun()
 
 pg = st.navigation(
     [
-        st.Page("dia_a_dia.py", title="Día a día", icon="💊", default=True),
-        st.Page("configuracion.py", title="Configuración", icon="⚙️"),
-        st.Page("historial.py", title="Historial", icon="📋"),
+        st.Page("dia_a_dia.py", title="Día a día", icon=":material/pill:", default=True),
+        st.Page("configuracion.py", title="Configuración", icon=":material/tune:"),
+        st.Page("historial.py", title="Historial", icon=":material/history:"),
     ]
 )
 pg.run()

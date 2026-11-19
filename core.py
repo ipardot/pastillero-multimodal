@@ -361,6 +361,30 @@ def comando_toma(accion: str) -> bool:
     return publicar({"accion": accion, "id": p["toma_id"]})
 
 
+def estado_dia(dia):
+    """Status of every dose for one simulated day (used by the day timeline)."""
+    salida = []
+    with db() as con:
+        for t in get_receta():
+            clave = f"{t['id']}@{dia:%Y%m%d}{t['hora'].replace(':', '')}"
+            evs = [
+                r["evento"]
+                for r in con.execute(
+                    "SELECT evento FROM eventos WHERE toma_id=? ORDER BY id", (clave,)
+                ).fetchall()
+            ]
+            if "confirmada" in evs:
+                estado = "confirmada"
+            elif "omitida" in evs:
+                estado = "omitida"
+            elif evs:
+                estado = "en_curso"
+            else:
+                estado = "sin_disparar"
+            salida.append({**t, "estado": estado, "pospuestas": evs.count("pospuesta")})
+    return salida
+
+
 def eventos(solo_finales: bool = True, limite: int = 500):
     filtro = "WHERE evento IN ('confirmada','pospuesta','omitida')" if solo_finales else ""
     with db() as con:
