@@ -1,15 +1,17 @@
 from datetime import time
 
-import pandas as pd
 import streamlit as st
 
 import core
+import estilos
+
+estilos.aplicar()
 
 st.title("⚙️ Configuración de la receta")
 st.caption("Ingresa tu receta fija una vez. El sistema no valida dosis ni interacciones.")
 
 # New dose form (one dose per time, one compartment = one medicine)
-with st.form("nueva_toma", clear_on_submit=True):
+with st.form("nueva_toma", clear_on_submit=True, border=True):
     med = st.text_input("Medicamento o vitamina")
     c1, c2 = st.columns(2)
     hora = c1.time_input("Hora de la toma", value=time(8, 0), step=60)
@@ -31,18 +33,16 @@ receta = core.get_receta()
 if not receta:
     st.info("Aún no hay tomas.")
 for t in receta:
-    c1, c2, c3, c4 = st.columns([3, 1.5, 1.5, 1])
-    c1.write(f"**{t['med']}**")
-    c2.write(t["hora"])
-    c3.write(f"Comp. {t['comp']}")
-    if c4.button("🗑️", key=f"del_{t['id']}"):
-        core.delete_toma(t["id"])
-        st.rerun()
+    with st.container(border=True):
+        c1, c2, c3, c4 = st.columns([3, 1.5, 1.5, 1], vertical_alignment="center")
+        c1.markdown(f"**{t['med']}**")
+        c2.write(f"🕒 {t['hora']}")
+        c3.write(f"Comp. {t['comp']}")
+        if c4.button("🗑️", key=f"del_{t['id']}", help="Eliminar toma"):
+            core.delete_toma(t["id"])
+            st.rerun()
 
 # Loading guide: which pill goes in which compartment
 st.subheader("Guía de carga del pastillero")
 st.caption("Carga cada medicamento en su compartimento numerado. El sistema no puede verificar qué hay dentro.")
-guia = pd.DataFrame(core.guia_de_carga())
-guia["med"] = guia["med"].fillna("— vacío —")
-guia = guia.rename(columns={"comp": "Compartimento", "med": "Contiene", "horas": "Horas de toma"})
-st.dataframe(guia, hide_index=True)
+estilos.compartimentos(core.guia_de_carga())
